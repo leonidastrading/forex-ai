@@ -5,7 +5,7 @@ import { runTick } from "@/lib/engine";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-// Called by Vercel Cron (GET with "Authorization: Bearer $CRON_SECRET").
+// Called every minute by an external scheduler (or Vercel Cron on Pro) with "Authorization: Bearer $CRON_SECRET".
 // Add ?force=1 to run outside FX hours (manual testing).
 export async function GET(req: Request) {
   if (!config.cronSecret || req.headers.get("authorization") !== `Bearer ${config.cronSecret}`) {

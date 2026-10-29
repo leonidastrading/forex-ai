@@ -10,7 +10,7 @@ feed, and all fills are simulated internally.
 ## How it works
 
 ```
-Vercel Cron (every minute, Sun–Fri)
+Scheduler (every minute, Sun–Fri)
   └─ GET /api/cron/tick
        ├─ skip if FX market closed / OANDA says not tradeable
        ├─ fetch EUR/USD bid/ask from OANDA → price_snapshots
@@ -88,7 +88,7 @@ account (free; create a token under *Manage API Access*).
 3. **Environment variables** (Project → Settings → Environment Variables, see `.env.example`):
    - `OANDA_API_KEY`, `OANDA_ACCOUNT_ID` (practice account, e.g. `101-004-1234567-001`)
    - `ANTHROPIC_API_KEY`
-   - `CRON_SECRET`: a long random string. Vercel Cron sends it automatically.
+   - `CRON_SECRET`: a long random string. The scheduler sends it as a Bearer token.
    - `LLM_DAILY_BUDGET_USD` (default 3)
    - optional `DASHBOARD_PASSWORD`
 4. **Redeploy** so the build picks up the variables and runs the migration.
@@ -97,17 +97,31 @@ account (free; create a token under *Manage API Access*).
    ```bash
    curl -H "Authorization: Bearer $CRON_SECRET" "https://<your-app>.vercel.app/api/cron/tick?force=1"
    ```
+6. **Schedule it** (next section).
 
-### Cron frequency and plan limits
+### Scheduling the tick
 
-`vercel.json` schedules the tick every minute, Sunday to Friday. The handler itself skips closed
-hours, so Saturday costs nothing. Per-minute crons need a paid Vercel plan. On Hobby, change the
-schedule to what your plan allows, or call the endpoint from any external scheduler with the
-`Authorization: Bearer $CRON_SECRET` header. With ticks less often than every 5 minutes, +5m
-outcomes can't resolve (see the 5-minute lag rule above).
+The engine runs when something calls `GET /api/cron/tick` with `Authorization: Bearer $CRON_SECRET`.
+Vercel Hobby only allows daily crons, so use a free external scheduler:
 
-Running every minute also keeps the Neon compute awake about 120 hours a week. Check that this fits
-your Neon plan.
+1. Sign up at [cron-job.org](https://cron-job.org) (free, supports every-minute jobs).
+2. Create a cronjob:
+   - URL: `https://<your-app>.vercel.app/api/cron/tick`
+   - Schedule: every minute
+   - Advanced → Headers: `Authorization` = `Bearer <your CRON_SECRET>`
+   - Optional: turn on failure notifications
+3. Save. "History" should show HTTP 200 responses. Outside FX hours the body is `{"status":"market_closed"}`.
+
+If the project's Deployment Protection blocks the production URL, the job gets a Vercel login page
+(401). Turn off Vercel Authentication for production, or add a protection-bypass secret.
+
+On a Vercel Pro plan you can use Vercel Cron instead. Add this to `vercel.json`:
+`"crons": [{ "path": "/api/cron/tick", "schedule": "* * * * 0-5" }]`. Vercel sends the
+`CRON_SECRET` header automatically.
+
+Ticks must come at least every 5 minutes for +5m outcomes to resolve (see the 5-minute lag rule
+above). Running every minute also keeps the Neon compute awake about 120 hours a week, so check
+that this fits your Neon plan.
 
 ### Cost
 
