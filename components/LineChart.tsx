@@ -40,8 +40,11 @@ export function LineChart({
   unit?: "usd" | "pips";
   label: string;
 }) {
+  let digits = 0; // set from the axis span below, so tiny ranges don't round to repeated labels
   const format = (v: number) =>
-    unit === "usd" ? `${v < 0 ? "-" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : v.toFixed(1);
+    unit === "usd"
+      ? `${v < 0 ? "-" : ""}$${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`
+      : v.toFixed(1);
   const ref = useRef<SVGSVGElement>(null);
   const [hoverT, setHoverT] = useState<number | null>(null);
   const live = series.filter((s) => s.points.length > 0);
@@ -72,6 +75,7 @@ export function LineChart({
     return <div className="empty">No data yet: {label}</div>;
   }
   const { x, y, ticks, t0, t1, withTime } = geo;
+  digits = ticks[ticks.length - 1] - ticks[0] < 20 ? 2 : 0;
 
   const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const r = ref.current!.getBoundingClientRect();
