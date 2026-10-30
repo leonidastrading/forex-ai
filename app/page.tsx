@@ -36,6 +36,27 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     })),
     h,
   );
+  // Totals row: entry counts and P&L summed; hit rate and mean move pooled over every resolved entry.
+  // t-stats are per bot only, since pooling bots with opposite biases would cancel them out.
+  const sums = rows.reduce(
+    (t, { analysis: a }) => {
+      const s = a.skill[h];
+      return {
+        n: t.n + s.n,
+        pending: t.pending + s.pending,
+        hits: t.hits + s.hitRate * s.n,
+        moveSum: t.moveSum + s.meanPips * s.n,
+        pnl: t.pnl + a.pnl,
+        inversePnl: t.inversePnl + a.inversePnl,
+      };
+    },
+    { n: 0, pending: 0, hits: 0, moveSum: 0, pnl: 0, inversePnl: 0 },
+  );
+  const totals = {
+    ...sums,
+    hitRate: sums.n ? sums.hits / sums.n : 0,
+    meanPips: sums.n ? sums.moveSum / sums.n : 0,
+  };
   const slotOf = new Map(bots.map((b, i) => [b.id, (i % 8) + 1]));
   const tests = bots.length * HORIZONS.length;
   const qs = (patch: Record<string, string>) =>
@@ -131,6 +152,26 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                 );
               })}
             </tbody>
+            <tfoot>
+              <tr>
+                <td />
+                <td>All bots</td>
+                <td className="num">
+                  {totals.n}
+                  {totals.pending > 0 && <span className="muted"> +{totals.pending} pending</span>}
+                </td>
+                <td className="num">{totals.n ? `${(totals.hitRate * 100).toFixed(0)}%` : "–"}</td>
+                <td className="num">{totals.n ? fmtNum(totals.meanPips, 2) : "–"}</td>
+                <td className="num">–</td>
+                <td className="num">–</td>
+                <td className="num" />
+                {HORIZONS.filter((x) => x !== h).map((x) => (
+                  <td key={x} className="num">–</td>
+                ))}
+                <td className="num">{fmtUsd(totals.pnl)}</td>
+                <td className="num">{fmtUsd(totals.inversePnl)}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
         <p className="note">
