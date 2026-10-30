@@ -80,7 +80,9 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           <div className="tile-label">LLM spend today</div>
           <div className="tile-value">${status.spentToday.toFixed(3)}</div>
           <div className="tile-sub">
-            of ${config.dailyBudgetUsd.toFixed(2)} cap · {status.callsToday} calls
+            of ${config.dailyBudgetUsd.toFixed(2)} cap · {status.callsToday.toLocaleString("en-US")} calls
+            <br />
+            Total ${status.spentTotal.toFixed(2)} · {status.callsTotal.toLocaleString("en-US")} calls
           </div>
         </div>
         <div className="tile">
