@@ -118,7 +118,10 @@ export default async function BotPage({ params, searchParams }: { params: Promis
                 return (
                   <tr key={h}>
                     <td>+{h}</td>
-                    <td className="num">{s.n}</td>
+                    <td className="num">
+                      {s.n}
+                      {s.pending > 0 && <span className="muted"> +{s.pending} pending</span>}
+                    </td>
                     <td className="num">{s.n ? `${(s.hitRate * 100).toFixed(0)}%` : "–"}</td>
                     <td className="num">{s.n ? fmtNum(s.meanPips) : "–"}</td>
                     <td className="num">{s.n >= 2 ? fmtNum(s.sdPips) : "–"}</td>

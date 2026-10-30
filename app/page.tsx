@@ -113,7 +113,10 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                       <Link href={`/bots/${bot.id}${qs({})}`}>{bot.name}</Link>{" "}
                       <span className="muted">{bot.persona}</span>
                     </td>
-                    <td className="num">{s.n}</td>
+                    <td className="num">
+                      {s.n}
+                      {s.pending > 0 && <span className="muted"> +{s.pending} pending</span>}
+                    </td>
                     <td className="num">{s.n ? `${(s.hitRate * 100).toFixed(0)}%` : "–"}</td>
                     <td className="num">{s.n ? fmtNum(s.meanPips, 2) : "–"}</td>
                     <td className={`num strong ${tClass(s.tStat, s.n)}`}>{s.n >= 2 ? fmtNum(s.tStat) : "–"}</td>

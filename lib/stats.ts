@@ -14,7 +14,8 @@ export interface EntryOutcome {
 }
 
 export interface SkillStats {
-  n: number;
+  n: number; // entries whose horizon has resolved
+  pending: number; // entries still waiting for their horizon (or with no price at it yet)
   meanPips: number;
   sdPips: number;
   tStat: number; // mean / (sd / sqrt(n)) over individual entries
@@ -50,6 +51,7 @@ export function skillStats(outcomes: EntryOutcome[]): SkillStats {
 
   return {
     n: moves.length,
+    pending: outcomes.length - moves.length,
     meanPips: mean,
     sdPips: sd,
     tStat: t,
