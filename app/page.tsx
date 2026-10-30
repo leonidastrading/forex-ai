@@ -85,7 +85,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         </div>
         <div className="tile">
           <div className="tile-label">Engine</div>
-          <div className="tile-value">{status.lastRun?.status ?? "never run"}</div>
+          <div className="tile-value">{status.lastRun ? (ENGINE_STATUS[status.lastRun.status] ?? status.lastRun.status) : "Waiting for first tick"}</div>
           <div className="tile-sub">
             {status.lastRun ? `last tick ${status.lastRun.started_at.toISOString().slice(0, 16).replace("T", " ")} UTC` : "waiting for cron"}
             {status.since ? ` · running since ${status.since.toISOString().slice(0, 10)}` : ""}
@@ -199,6 +199,18 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
     </>
   );
 }
+
+// Plain-English labels for engine_runs.status.
+const ENGINE_STATUS: Record<string, string> = {
+  ok: "Running · bots decided",
+  no_bots_due: "Running · price recorded",
+  market_closed: "Market closed",
+  not_tradeable: "Market paused (OANDA)",
+  budget_exhausted: "Daily LLM budget reached",
+  locked: "Running · previous tick busy",
+  running: "Tick in progress",
+  error: "Error on last tick",
+};
 
 function tClass(t: number, n: number) {
   if (n < 2) return "";
