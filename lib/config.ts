@@ -20,6 +20,7 @@ export const config = {
 
   // LLM: "anthropic" (default) or "mock" (random decisions, no API cost).
   llmProvider: (process.env.LLM_PROVIDER ?? "anthropic") as "anthropic" | "mock",
+  anthropicWorkspaceId: process.env.ANTHROPIC_WORKSPACE_ID ?? "",
   llmModel: process.env.LLM_MODEL ?? "claude-haiku-5-5",
   llmEffort: (process.env.LLM_EFFORT ?? "low") as "low" | "medium" | "high",
   llmMaxTokens: num("LLM_MAX_TOKENS", 2000),

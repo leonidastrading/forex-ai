@@ -28,7 +28,12 @@ export async function askBot(systemPrompt: string, userMessage: string, model?: 
   const modelId = model || config.llmModel;
   if (config.llmProvider === "mock") return mockDecision(modelId, started);
 
-  client ??= new Anthropic({ maxRetries: 1, timeout: 45_000 });
+  client ??= new Anthropic({
+    maxRetries: 1,
+    timeout: 45_000,
+    // Org-level API keys (not scoped to a workspace) must name the workspace on every request.
+    defaultHeaders: config.anthropicWorkspaceId ? { "anthropic-workspace-id": config.anthropicWorkspaceId } : undefined,
+  });
   try {
     const res = await client.messages.parse({
       model: modelId,

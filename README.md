@@ -87,7 +87,8 @@ account (free; create a token under *Manage API Access*).
    (`vercel-build` runs `scripts/migrate.ts`, which is idempotent).
 3. **Environment variables** (Project → Settings → Environment Variables, see `.env.example`):
    - `OANDA_API_KEY`, `OANDA_ACCOUNT_ID` (practice account, e.g. `101-004-1234567-001`)
-   - `ANTHROPIC_API_KEY`
+   - `ANTHROPIC_API_KEY`. If calls fail with "API key is not scoped to a workspace", either create the
+     key inside a workspace in the Anthropic Console or also set `ANTHROPIC_WORKSPACE_ID`.
    - `CRON_SECRET`: a long random string. The scheduler sends it as a Bearer token.
    - `LLM_DAILY_BUDGET_USD` (default 3)
    - optional `DASHBOARD_PASSWORD`
