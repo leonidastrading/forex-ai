@@ -51,5 +51,11 @@ export function wrongnessOrder<T extends { analysis: BotAnalysis }>(rows: T[], h
   return [...rows].sort((a, b) => key(a) - key(b));
 }
 
-export const fmtUsd = (v: number) => `${v < 0 ? "-" : v > 0 ? "+" : ""}$${Math.abs(v).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+// Rounded to whole dollars first, so a tiny loss shows as "$0" rather than "-$0".
+export const fmtUsd = (v: number) => {
+  const r = Math.round(v);
+  return `${r < 0 ? "-" : r > 0 ? "+" : ""}$${Math.abs(r).toLocaleString("en-US")}`;
+};
+// Green for a gain, red for a loss, neutral when it rounds to $0.
+export const pnlClass = (v: number) => (Math.round(v) > 0 ? "pos" : Math.round(v) < 0 ? "neg" : "");
 export const fmtNum = (v: number, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : "–");

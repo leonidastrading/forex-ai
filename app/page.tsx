@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { LineChart } from "@/components/LineChart";
-import { analyseBot, fmtNum, fmtUsd, parseHorizon, parseInverseParams, wrongnessOrder } from "@/lib/analysis";
+import { analyseBot, fmtNum, fmtUsd, parseHorizon, pnlClass, parseInverseParams, wrongnessOrder } from "@/lib/analysis";
 import { config } from "@/lib/config";
 import { getBots, getEngineStatus, getEntryOutcomes, getFills, getMarks } from "@/lib/queries";
 import { HORIZONS } from "@/lib/stats";
@@ -146,8 +146,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                     {HORIZONS.filter((x) => x !== h).map((x) => (
                       <td key={x} className="num">{a.skill[x].n >= 2 ? fmtNum(a.skill[x].tStat) : "–"}</td>
                     ))}
-                    <td className="num">{fmtUsd(a.pnl)}</td>
-                    <td className="num">{fmtUsd(a.inversePnl)}</td>
+                    <td className={`num ${pnlClass(a.pnl)}`}>{fmtUsd(a.pnl)}</td>
+                    <td className={`num ${pnlClass(a.inversePnl)}`}>{fmtUsd(a.inversePnl)}</td>
                   </tr>
                 );
               })}
@@ -168,8 +168,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                 {HORIZONS.filter((x) => x !== h).map((x) => (
                   <td key={x} className="num">–</td>
                 ))}
-                <td className="num">{fmtUsd(totals.pnl)}</td>
-                <td className="num">{fmtUsd(totals.inversePnl)}</td>
+                <td className={`num ${pnlClass(totals.pnl)}`}>{fmtUsd(totals.pnl)}</td>
+                <td className={`num ${pnlClass(totals.inversePnl)}`}>{fmtUsd(totals.inversePnl)}</td>
               </tr>
             </tfoot>
           </table>

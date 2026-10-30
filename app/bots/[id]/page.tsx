@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LineChart } from "@/components/LineChart";
-import { analyseBot, fmtNum, fmtUsd, parseInverseParams } from "@/lib/analysis";
+import { analyseBot, fmtNum, fmtUsd, parseInverseParams, pnlClass } from "@/lib/analysis";
 import { config } from "@/lib/config";
 import { getBot, getBots, getDecisions, getEntryOutcomes, getFills, getMarks, getPrompt, getTrades } from "@/lib/queries";
 import { HORIZONS } from "@/lib/stats";
@@ -51,12 +51,12 @@ export default async function BotPage({ params, searchParams }: { params: Promis
         </div>
         <div className="tile">
           <div className="tile-label">Bot P&amp;L</div>
-          <div className="tile-value">{fmtUsd(a.pnl)}</div>
+          <div className={`tile-value ${pnlClass(a.pnl)}`}>{fmtUsd(a.pnl)}</div>
           <div className="tile-sub">realized {fmtUsd(bot.realized_pnl)} · start ${bot.starting_balance.toLocaleString("en-US")}</div>
         </div>
         <div className="tile">
           <div className="tile-label">Inverse P&amp;L</div>
-          <div className="tile-value">{fmtUsd(a.inversePnl)}</div>
+          <div className={`tile-value ${pnlClass(a.inversePnl)}`}>{fmtUsd(a.inversePnl)}</div>
           <div className="tile-sub">max drawdown {fmtUsd(a.inverseMaxDd)}</div>
         </div>
         <div className="tile">
@@ -160,7 +160,7 @@ export default async function BotPage({ params, searchParams }: { params: Promis
                   <td className="num">{t.units.toLocaleString("en-US")}</td>
                   <td className="num">{t.price.toFixed(5)}</td>
                   <td>{t.kind}</td>
-                  <td className="num">{t.realized_pnl ? fmtUsd(t.realized_pnl) : ""}</td>
+                  <td className={`num ${pnlClass(t.realized_pnl)}`}>{t.realized_pnl ? fmtUsd(t.realized_pnl) : ""}</td>
                   <td className="num">{t.position_after.toLocaleString("en-US")}</td>
                   <td className="reason">{t.reason}</td>
                 </tr>
