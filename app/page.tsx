@@ -92,6 +92,11 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
             {status.lastRun ? `last tick ${status.lastRun.started_at.toISOString().slice(0, 16).replace("T", " ")} UTC` : "waiting for cron"}
             {status.since ? ` · running since ${status.since.toISOString().slice(0, 10)}` : ""}
           </div>
+          {status.lastError && Date.now() - status.lastError.started_at.getTime() < 24 * 3.6e6 && (
+            <div className="tile-sub warn">
+              Last error {status.lastError.started_at.toISOString().slice(11, 16)} UTC: {status.lastError.error ?? status.lastError.status}
+            </div>
+          )}
         </div>
       </section>
 
@@ -212,6 +217,7 @@ const ENGINE_STATUS: Record<string, string> = {
   locked: "Running · previous tick busy",
   running: "Tick in progress",
   error: "Error on last tick",
+  price_unavailable: "Price feed unavailable",
 };
 
 function tClass(t: number, n: number) {

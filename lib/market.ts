@@ -47,7 +47,10 @@ export async function getQuote(): Promise<Quote> {
     prices: { time: string; tradeable: boolean; bids: { price: string }[]; asks: { price: string }[] }[];
   }>(`/v3/accounts/${config.oandaAccountId}/pricing?instruments=${config.instrument}`);
   const p = data.prices[0];
-  if (!p?.bids?.length || !p?.asks?.length) throw new Error("OANDA returned no EUR_USD price");
+  // Around the weekly close OANDA can return the instrument with an empty book: treat as closed.
+  if (!p?.bids?.length || !p?.asks?.length) {
+    return { ts: new Date(), bid: NaN, ask: NaN, tradeable: false, source: "oanda" };
+  }
   return {
     ts: new Date(p.time),
     bid: Number(p.bids[0].price),

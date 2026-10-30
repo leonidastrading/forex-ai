@@ -57,7 +57,13 @@ async function tick(sql: postgres.Sql, opts: { force?: boolean }): Promise<TickS
   const now = new Date();
   if (!opts.force && !fxMarketOpen(now)) return { status: "market_closed" };
 
-  const quote = await getQuote();
+  let quote: Quote;
+  try {
+    quote = await getQuote();
+  } catch (err) {
+    // Feed outages are expected now and then; record them without failing the whole tick.
+    return { status: "price_unavailable", error: err instanceof Error ? err.message : String(err) };
+  }
   if (!quote.tradeable && !opts.force) return { status: "not_tradeable", quote: { bid: quote.bid, ask: quote.ask } };
 
   const [snap] = await sql<{ id: string }[]>`

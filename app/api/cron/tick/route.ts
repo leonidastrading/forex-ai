@@ -13,5 +13,8 @@ export async function GET(req: Request) {
   }
   const force = new URL(req.url).searchParams.get("force") === "1";
   const summary = await runTick({ force });
-  return NextResponse.json(summary, { status: summary.status === "error" ? 500 : 200 });
+  // Always 200 once authorized: the outcome is in the body and in engine_runs (shown on the dashboard).
+  // Returning 5xx would make external schedulers like cron-job.org disable the job after a few failures.
+  if (summary.error) console.error(`tick ${summary.status}: ${summary.error}`);
+  return NextResponse.json(summary);
 }
