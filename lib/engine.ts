@@ -102,7 +102,7 @@ async function tick(sql: postgres.Sql, opts: { force?: boolean }): Promise<TickS
   };
   if (!selected.length) return { status: skippedForBudget.length ? "budget_exhausted" : "no_bots_due", ...base };
 
-  const [m5, h1, news] = await Promise.all([getCandles("M5", 36), getCandles("H1", 24), relevantNews(now)]);
+  const [m5, h1, news] = await Promise.all([candles(sql, "M5", 36), candles(sql, "H1", 24), relevantNews(now)]);
 
   const results = await Promise.all(
     selected.map(async (bot) => {
@@ -118,6 +118,25 @@ async function tick(sql: postgres.Sql, opts: { force?: boolean }): Promise<TickS
     }),
   );
   return { status: "ok", ...base, results };
+}
+
+// Candles with a fallback: each successful fetch is cached, and if OANDA fails even after retries
+// the last copy (up to 30 minutes old) is used, so one bad request doesn't cost a decision round.
+async function candles(sql: postgres.Sql, granularity: "M5" | "H1", count: number): Promise<Candle[]> {
+  const key = `candles_${granularity}_${count}`;
+  try {
+    const fresh = await getCandles(granularity, count);
+    await sql`
+      INSERT INTO kv_cache (key, value, expires_at)
+      VALUES (${key}, ${sql.json(fresh.map((c) => ({ ...c, ts: c.ts.toISOString() })) as never)}, now() + interval '30 minutes')
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, expires_at = EXCLUDED.expires_at`;
+    return fresh;
+  } catch (err) {
+    const [cached] = await sql<{ value: (Omit<Candle, "ts"> & { ts: string })[] }[]>`
+      SELECT value FROM kv_cache WHERE key = ${key} AND expires_at > now()`;
+    if (!cached) throw err;
+    return cached.value.map((c) => ({ ...c, ts: new Date(c.ts) }));
+  }
 }
 
 // ---- Bot context ----------------------------------------------------------------------------

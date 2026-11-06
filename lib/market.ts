@@ -29,15 +29,29 @@ export function fxMarketOpen(now = new Date()): boolean {
   return true;
 }
 
+// The practice API intermittently answers 401 "Insufficient authorization" (and 5xx during
+// maintenance) for a valid token; the next request usually succeeds. Retry those a few times.
+const RETRYABLE = new Set([401, 429, 500, 502, 503, 504]);
+const RETRY_DELAYS_MS = [400, 1200, 2500];
+
 async function oanda<T>(path: string): Promise<T> {
   if (!config.oandaApiKey) throw new Error("OANDA_API_KEY is not set");
-  const res = await fetch(`${config.oandaBaseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${config.oandaApiKey}`, "Accept-Datetime-Format": "RFC3339" },
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!res.ok) throw new Error(`OANDA ${path.split("?")[0]} → ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  return (await res.json()) as T;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(`${config.oandaBaseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${config.oandaApiKey}`, "Accept-Datetime-Format": "RFC3339" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (res.ok) return (await res.json()) as T;
+    if (RETRYABLE.has(res.status) && attempt < RETRY_DELAYS_MS.length) {
+      await res.body?.cancel();
+      await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt]));
+      continue;
+    }
+    throw new Error(
+      `OANDA ${path.split("?")[0]} → ${res.status} after ${attempt + 1} tries: ${(await res.text()).slice(0, 200)}`,
+    );
+  }
 }
 
 export async function getQuote(): Promise<Quote> {
