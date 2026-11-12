@@ -159,3 +159,17 @@ pre { white-space: pre-wrap; background: var(--surface); border: 1px solid var(-
 .login input[type="password"] { padding: 10px; font-size: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
 .login button { padding: 10px; font-size: 15px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; }
 .login .warn { margin: 0; }
+
+/* Leaderboard: table on wide screens, one card per bot on phones. */
+.bot-cards { display: none; }
+@media (max-width: 760px) {
+  .leaderboard-table { display: none; }
+  .bot-cards { display: grid; gap: 10px; }
+  .bot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .bot-card.total { font-weight: 650; }
+  .bot-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-bottom: 8px; font-size: 15px; }
+  .bot-card-head .swatch { margin-right: 0; }
+  .bot-card dl { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 4px 10px; margin: 0; font-size: 13px; }
+  .bot-card dt { color: var(--text-2); }
+  .bot-card dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+}

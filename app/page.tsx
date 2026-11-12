@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { LineChart } from "@/components/LineChart";
 import { analyseBot, fmtNum, fmtUsd, parseHorizon, pnlClass, parseInverseParams, wrongnessOrder } from "@/lib/analysis";
 import { config } from "@/lib/config";
@@ -111,7 +112,7 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
             ))}
           </nav>
         </div>
-        <div className="table-wrap">
+        <div className="table-wrap leaderboard-table">
           <table>
             <thead>
               <tr>
@@ -180,6 +181,67 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
               </tr>
             </tfoot>
           </table>
+        </div>
+        {/* Phones: one card per bot so every number is visible without scrolling sideways. */}
+        <div className="bot-cards">
+          {rows.map(({ bot, analysis: a }, i) => {
+            const s = a.skill[h];
+            return (
+              <div key={bot.id} className="bot-card">
+                <div className="bot-card-head">
+                  <span className="muted">#{i + 1}</span>
+                  <i className={`swatch s${slotOf.get(bot.id)}`} />
+                  <Link href={`/bots/${bot.id}${qs({})}`}>{bot.name}</Link>
+                  <span className="muted">{bot.persona}</span>
+                </div>
+                <dl>
+                  <dt>Bot P&amp;L</dt>
+                  <dd className={pnlClass(a.pnl)}>{fmtUsd(a.pnl)}</dd>
+                  <dt>Inverse P&amp;L</dt>
+                  <dd className={pnlClass(a.inversePnl)}>{fmtUsd(a.inversePnl)}</dd>
+                  <dt>t-stat +{h}</dt>
+                  <dd className={`strong ${tClass(s.tStat, s.n)}`}>{s.n >= 2 ? fmtNum(s.tStat) : "–"}</dd>
+                  <dt>t (daily)</dt>
+                  <dd className={tClass(s.tStatDaily, s.days)}>{s.days >= 2 ? fmtNum(s.tStatDaily) : "–"}</dd>
+                  <dt>Entries</dt>
+                  <dd>
+                    {s.n}
+                    {s.pending > 0 && <span className="muted"> +{s.pending}</span>}
+                  </dd>
+                  <dt>Days</dt>
+                  <dd>{s.days}</dd>
+                  <dt>Hit rate</dt>
+                  <dd>{s.n ? `${(s.hitRate * 100).toFixed(0)}%` : "–"}</dd>
+                  <dt>Mean move</dt>
+                  <dd>{s.n ? `${fmtNum(s.meanPips, 2)} pips` : "–"}</dd>
+                  {HORIZONS.filter((x) => x !== h).map((x) => (
+                    <Fragment key={x}>
+                      <dt>t +{x}</dt>
+                      <dd>{a.skill[x].n >= 2 ? fmtNum(a.skill[x].tStat) : "–"}</dd>
+                    </Fragment>
+                  ))}
+                </dl>
+              </div>
+            );
+          })}
+          <div className="bot-card total">
+            <div className="bot-card-head">All bots</div>
+            <dl>
+              <dt>Bot P&amp;L</dt>
+              <dd className={pnlClass(totals.pnl)}>{fmtUsd(totals.pnl)}</dd>
+              <dt>Inverse P&amp;L</dt>
+              <dd className={pnlClass(totals.inversePnl)}>{fmtUsd(totals.inversePnl)}</dd>
+              <dt>Entries</dt>
+              <dd>
+                {totals.n}
+                {totals.pending > 0 && <span className="muted"> +{totals.pending}</span>}
+              </dd>
+              <dt>Hit rate</dt>
+              <dd>{totals.n ? `${(totals.hitRate * 100).toFixed(0)}%` : "–"}</dd>
+              <dt>Mean move</dt>
+              <dd>{totals.n ? `${fmtNum(totals.meanPips, 2)} pips` : "–"}</dd>
+            </dl>
+          </div>
         </div>
         <p className="note">
           Direction skill = mid-price move from entry to entry +{h}, signed by the bot&apos;s direction, spread excluded.
