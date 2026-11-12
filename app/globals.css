@@ -184,3 +184,14 @@ pre { white-space: pre-wrap; background: var(--surface); border: 1px solid var(-
 .card-skill tr:last-child td { border-bottom: none; }
 .card-skill tr.current td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .card-skill .group-start { border-left: none; }
+
+/* Simple totals: table on wide screens, cards on phones. */
+.simple-cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.simple-cards .bot-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.simple-cards .bot-card.total { font-weight: 650; }
+.simple-cards .bot-card-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin-bottom: 8px; font-size: 15px; }
+.simple-cards dl { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; margin: 0; font-size: 14px; }
+.simple-cards dt { color: var(--text-2); }
+.simple-cards dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+details.advanced { margin: 0 0 28px; }
+details.advanced > summary { font-size: 15px; font-weight: 600; margin-bottom: 14px; }

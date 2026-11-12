@@ -121,6 +121,41 @@ export async function getDecisions(botId: number, limit = 100) {
     WHERE d.bot_id = ${botId} ORDER BY d.ts DESC LIMIT ${limit}`;
 }
 
+// Per-bot trade totals since the first trade. A "closed trade" is any fill that realized P&L
+// (a reduce, close or flip); a win is one that realized a profit.
+export interface TradeTotals {
+  bot_id: number;
+  fills: number;
+  closed: number;
+  wins: number;
+  losses: number;
+  realized: number;
+  avg_win: number | null;
+  avg_loss: number | null;
+  best: number | null;
+  worst: number | null;
+  volume: number;
+  first_trade: Date | null;
+}
+
+export async function getTradeTotals(): Promise<TradeTotals[]> {
+  const sql = getSql();
+  return sql<TradeTotals[]>`
+    SELECT bot_id,
+           count(*)::int AS fills,
+           count(*) FILTER (WHERE realized_pnl <> 0)::int AS closed,
+           count(*) FILTER (WHERE realized_pnl > 0)::int AS wins,
+           count(*) FILTER (WHERE realized_pnl < 0)::int AS losses,
+           coalesce(sum(realized_pnl), 0)::float8 AS realized,
+           (avg(realized_pnl) FILTER (WHERE realized_pnl > 0))::float8 AS avg_win,
+           (avg(realized_pnl) FILTER (WHERE realized_pnl < 0))::float8 AS avg_loss,
+           (max(realized_pnl) FILTER (WHERE realized_pnl <> 0))::float8 AS best,
+           (min(realized_pnl) FILTER (WHERE realized_pnl <> 0))::float8 AS worst,
+           coalesce(sum(units), 0)::float8 AS volume,
+           min(ts) AS first_trade
+    FROM trades GROUP BY bot_id`;
+}
+
 export async function getTrades(botId: number, limit = 100) {
   const sql = getSql();
   return sql<{ id: string; ts: Date; side: string; units: number; price: number; bid: number; ask: number; kind: string; realized_pnl: number; position_after: number; reason: string | null }[]>`

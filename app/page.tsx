@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { LineChart } from "@/components/LineChart";
 import { analyseBot, fmtNum, fmtUsd, parseHorizon, pnlClass, parseInverseParams, wrongnessOrder } from "@/lib/analysis";
 import { config } from "@/lib/config";
-import { getBots, getEngineStatus, getEntryOutcomes, getFills, getMarks } from "@/lib/queries";
+import { getBots, getEngineStatus, getEntryOutcomes, getFills, getMarks, getTradeTotals } from "@/lib/queries";
+import { maxDrawdown, type EquityPoint } from "@/lib/sim";
 import { HORIZONS, skillStats, type Horizon, type SkillStats } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
@@ -16,12 +18,13 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   const h: Horizon = view === "all" ? "1h" : view;
   const inv = parseInverseParams(sp);
 
-  const [bots, status, outcomes, fills, marks] = await Promise.all([
+  const [bots, status, outcomes, fills, marks, tradeTotals] = await Promise.all([
     getBots(),
     getEngineStatus(),
     getEntryOutcomes(),
     getFills(),
     getMarks(),
+    getTradeTotals(),
   ]);
 
   const rows = wrongnessOrder(
@@ -49,6 +52,60 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
       SkillStats
     >,
   };
+  const totalsByBot = new Map(tradeTotals.map((t) => [t.bot_id, t]));
+  const simpleRows: SimpleRow[] = [...rows]
+    .sort((x, y) => y.analysis.inversePnl - x.analysis.inversePnl)
+    .map(({ bot, analysis: a }) => {
+      const t = totalsByBot.get(bot.id);
+      return {
+        id: bot.id,
+        name: bot.name,
+        persona: bot.persona,
+        slot: bots.findIndex((b) => b.id === bot.id) % 8 + 1,
+        href: `/bots/${bot.id}`,
+        fills: t?.fills ?? 0,
+        closed: t?.closed ?? 0,
+        wins: t?.wins ?? 0,
+        losses: t?.losses ?? 0,
+        avgWin: t?.avg_win ?? 0,
+        avgLoss: t?.avg_loss ?? 0,
+        best: t?.best ?? 0,
+        worst: t?.worst ?? 0,
+        volume: t?.volume ?? 0,
+        firstTrade: t?.first_trade ?? null,
+        position: bot.units,
+        realized: bot.realized_pnl,
+        pnl: a.pnl,
+        maxDd: maxDrawdown(a.equity),
+        inversePnl: a.inversePnl,
+        inverseMaxDd: a.inverseMaxDd,
+      };
+    });
+  const sumOf = (k: keyof SimpleRow) => simpleRows.reduce((t, r) => t + (r[k] as number), 0);
+  simpleRows.push({
+    id: 0,
+    name: "All bots",
+    persona: "",
+    slot: 0,
+    href: "",
+    fills: sumOf("fills"),
+    closed: sumOf("closed"),
+    wins: sumOf("wins"),
+    losses: sumOf("losses"),
+    avgWin: weighted(simpleRows, "avgWin", "wins"),
+    avgLoss: weighted(simpleRows, "avgLoss", "losses"),
+    best: Math.max(0, ...simpleRows.map((r) => r.best)),
+    worst: Math.min(0, ...simpleRows.map((r) => r.worst)),
+    volume: sumOf("volume"),
+    firstTrade: simpleRows.reduce<Date | null>((d, r) => (r.firstTrade && (!d || r.firstTrade < d) ? r.firstTrade : d), null),
+    position: sumOf("position"),
+    realized: sumOf("realized"),
+    pnl: sumOf("pnl"),
+    // Drawdown of all five bots run together: sum the equity curves (they share one price timeline).
+    maxDd: maxDrawdown(sumCurves(rows.map((r) => r.analysis.equity))),
+    inversePnl: sumOf("inversePnl"),
+    inverseMaxDd: maxDrawdown(sumCurves(rows.map((r) => r.analysis.inverse))),
+  });
   const slotOf = new Map(bots.map((b, i) => [b.id, (i % 8) + 1]));
   const tests = bots.length * HORIZONS.length;
   const qs = (patch: Record<string, string>) =>
@@ -92,6 +149,18 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         </div>
       </section>
 
+      <section>
+        <h2>Totals since start</h2>
+        <SimpleTotals rows={simpleRows} />
+        <p className="note">
+          Sorted by inverse P&amp;L, best first. P&amp;L includes open positions at the current price. A closed trade is any
+          fill that took profit or loss; win rate = winning closed trades ÷ all closed trades. Inverse = taking the opposite
+          side of every trade (×{inv.multiplier} size, +{inv.extraCostPips} pips extra cost).
+        </p>
+      </section>
+
+      <details className="advanced">
+        <summary>Advanced: direction skill by time horizon</summary>
       <section>
         <div className="section-head">
           <h2>Leaderboard: most consistently wrong first</h2>
@@ -290,6 +359,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
         </p>
       </section>
 
+      </details>
+
       <section>
         <h2>Bot P&amp;L</h2>
         <LineChart
@@ -302,6 +373,95 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           }))}
         />
       </section>
+    </>
+  );
+}
+
+interface SimpleRow {
+  id: number;
+  name: string;
+  persona: string;
+  slot: number;
+  href: string;
+  fills: number;
+  closed: number;
+  wins: number;
+  losses: number;
+  avgWin: number;
+  avgLoss: number;
+  best: number;
+  worst: number;
+  volume: number;
+  firstTrade: Date | null;
+  position: number;
+  realized: number;
+  pnl: number;
+  maxDd: number;
+  inversePnl: number;
+  inverseMaxDd: number;
+}
+
+function sumCurves(curves: EquityPoint[][]): EquityPoint[] {
+  const n = Math.max(0, ...curves.map((c) => c.length));
+  return Array.from({ length: n }, (_, i) => ({
+    ts: curves[0]?.[i]?.ts ?? 0,
+    equity: curves.reduce((t, c) => t + (c[i]?.equity ?? 0), 0),
+  }));
+}
+
+function weighted(rows: SimpleRow[], k: "avgWin" | "avgLoss", w: "wins" | "losses") {
+  const n = rows.reduce((t, r) => t + r[w], 0);
+  return n ? rows.reduce((t, r) => t + r[k] * r[w], 0) / n : 0;
+}
+
+const SIMPLE_COLS: { label: string; cell: (r: SimpleRow) => React.ReactNode; cls?: (r: SimpleRow) => string }[] = [
+  { label: "Bot P&L", cell: (r) => fmtUsd(r.pnl), cls: (r) => pnlClass(r.pnl) },
+  { label: "Inverse P&L", cell: (r) => fmtUsd(r.inversePnl), cls: (r) => pnlClass(r.inversePnl) },
+  { label: "Trades", cell: (r) => r.fills.toLocaleString("en-US") },
+  { label: "Closed trades", cell: (r) => r.closed.toLocaleString("en-US") },
+  { label: "Wins", cell: (r) => r.wins.toLocaleString("en-US") },
+  { label: "Losses", cell: (r) => r.losses.toLocaleString("en-US") },
+  { label: "Win rate", cell: (r) => (r.closed ? pct(r.wins / r.closed) : "0%") },
+  { label: "Avg win", cell: (r) => fmtUsd(r.avgWin), cls: (r) => pnlClass(r.avgWin) },
+  { label: "Avg loss", cell: (r) => fmtUsd(r.avgLoss), cls: (r) => pnlClass(r.avgLoss) },
+  { label: "Best trade", cell: (r) => fmtUsd(r.best), cls: (r) => pnlClass(r.best) },
+  { label: "Worst trade", cell: (r) => fmtUsd(r.worst), cls: (r) => pnlClass(r.worst) },
+  { label: "Realized P&L", cell: (r) => fmtUsd(r.realized), cls: (r) => pnlClass(r.realized) },
+  { label: "Open P&L", cell: (r) => fmtUsd(r.pnl - r.realized), cls: (r) => pnlClass(r.pnl - r.realized) },
+  { label: "Open position", cell: (r) => (r.position === 0 ? "Flat" : `${r.position > 0 ? "Long" : "Short"} ${Math.abs(r.position).toLocaleString("en-US")}`) },
+  { label: "Max drawdown", cell: (r) => fmtUsd(r.maxDd), cls: (r) => pnlClass(r.maxDd) },
+  { label: "Inverse max DD", cell: (r) => fmtUsd(r.inverseMaxDd), cls: (r) => pnlClass(r.inverseMaxDd) },
+  { label: "Volume (EUR)", cell: (r) => Math.round(r.volume).toLocaleString("en-US") },
+  { label: "First trade", cell: (r) => (r.firstTrade ? r.firstTrade.toISOString().slice(0, 10) : "") },
+];
+
+function SimpleTotals({ rows }: { rows: SimpleRow[] }) {
+  const name = (r: SimpleRow) =>
+    r.href ? (
+      <>
+        <i className={`swatch s${r.slot}`} />
+        <Link href={r.href}>{r.name}</Link> <span className="muted">{r.persona}</span>
+      </>
+    ) : (
+      r.name
+    );
+  return (
+    <>
+      <div className="simple-cards">
+        {rows.map((r) => (
+          <div key={r.id} className={`bot-card${r.href ? "" : " total"}`}>
+            <div className="bot-card-head">{name(r)}</div>
+            <dl>
+              {SIMPLE_COLS.map((c) => (
+                <Fragment key={c.label}>
+                  <dt>{c.label}</dt>
+                  <dd className={c.cls?.(r) ?? ""}>{c.cell(r)}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          </div>
+        ))}
+      </div>
     </>
   );
 }
