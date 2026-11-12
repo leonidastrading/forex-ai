@@ -1,10 +1,9 @@
 import Link from "next/link";
-import { Fragment } from "react";
 import { LineChart } from "@/components/LineChart";
 import { analyseBot, fmtNum, fmtUsd, parseHorizon, pnlClass, parseInverseParams, wrongnessOrder } from "@/lib/analysis";
 import { config } from "@/lib/config";
 import { getBots, getEngineStatus, getEntryOutcomes, getFills, getMarks } from "@/lib/queries";
-import { HORIZONS } from "@/lib/stats";
+import { HORIZONS, skillStats, type Horizon, type SkillStats } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +11,9 @@ type SP = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function Overview({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
-  const h = parseHorizon(sp.h);
+  // "all" shows every horizon side by side; ranking then uses +1h.
+  const view: Horizon | "all" = sp.h === "all" ? "all" : parseHorizon(sp.h);
+  const h: Horizon = view === "all" ? "1h" : view;
   const inv = parseInverseParams(sp);
 
   const [bots, status, outcomes, fills, marks] = await Promise.all([
@@ -39,29 +40,19 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
   );
   // Totals row: entry counts and P&L summed; hit rate and mean move pooled over every resolved entry.
   // t-stats are per bot only, since pooling bots with opposite biases would cancel them out.
-  const sums = rows.reduce(
-    (t, { analysis: a }) => {
-      const s = a.skill[h];
-      return {
-        n: t.n + s.n,
-        pending: t.pending + s.pending,
-        hits: t.hits + s.hitRate * s.n,
-        moveSum: t.moveSum + s.meanPips * s.n,
-        pnl: t.pnl + a.pnl,
-        inversePnl: t.inversePnl + a.inversePnl,
-      };
-    },
-    { n: 0, pending: 0, hits: 0, moveSum: 0, pnl: 0, inversePnl: 0 },
-  );
+  // Totals: P&L summed; every skill number computed over all bots' entries pooled together.
   const totals = {
-    ...sums,
-    hitRate: sums.n ? sums.hits / sums.n : 0,
-    meanPips: sums.n ? sums.moveSum / sums.n : 0,
+    pnl: rows.reduce((t, r) => t + r.analysis.pnl, 0),
+    inversePnl: rows.reduce((t, r) => t + r.analysis.inversePnl, 0),
+    skill: Object.fromEntries(HORIZONS.map((x) => [x, skillStats(outcomes.filter((o) => o.horizon === x))])) as Record<
+      Horizon,
+      SkillStats
+    >,
   };
   const slotOf = new Map(bots.map((b, i) => [b.id, (i % 8) + 1]));
   const tests = bots.length * HORIZONS.length;
   const qs = (patch: Record<string, string>) =>
-    "?" + new URLSearchParams({ h, mult: String(inv.multiplier), cost: String(inv.extraCostPips), ...patch }).toString();
+    "?" + new URLSearchParams({ h: view, mult: String(inv.multiplier), cost: String(inv.extraCostPips), ...patch }).toString();
 
   return (
     <>
@@ -106,35 +97,92 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           <h2>Leaderboard: most consistently wrong first</h2>
           <nav className="segmented" aria-label="Horizon">
             {HORIZONS.map((x) => (
-              <Link key={x} href={qs({ h: x })} className={x === h ? "on" : ""}>
+              <Link key={x} href={qs({ h: x })} className={x === view ? "on" : ""}>
                 +{x}
               </Link>
             ))}
+            <Link href={qs({ h: "all" })} className={view === "all" ? "on" : ""}>
+              All
+            </Link>
           </nav>
         </div>
-        <div className="table-wrap leaderboard-table">
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Bot</th>
-                <th className="num">Entries</th>
-                <th className="num">Hit rate</th>
-                <th className="num">Mean move (pips)</th>
-                <th className="num">t-stat</th>
-                <th className="num">t (daily)</th>
-                <th className="num">Days</th>
-                {HORIZONS.filter((x) => x !== h).map((x) => (
-                  <th key={x} className="num">t +{x}</th>
+        {view === "all" ? (
+          <div className="table-wrap leaderboard-table">
+            <table className="all-table">
+              <thead>
+                <tr>
+                  <th rowSpan={2}>#</th>
+                  <th rowSpan={2}>Bot</th>
+                  <th rowSpan={2} className="num">Bot P&amp;L</th>
+                  <th rowSpan={2} className="num">Inverse P&amp;L</th>
+                  <th rowSpan={2} className="num">Inverse max DD</th>
+                  {HORIZONS.map((x) => (
+                    <th key={x} colSpan={SKILL_COLS.length} className="group">+{x}</th>
+                  ))}
+                </tr>
+                <tr>
+                  {HORIZONS.map((x) =>
+                    SKILL_COLS.map((c, j) => (
+                      <th key={x + c.label} className={`num${j === 0 ? " group-start" : ""}`}>{c.label}</th>
+                    )),
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ bot, analysis: a }, i) => (
+                  <tr key={bot.id}>
+                    <td>{i + 1}</td>
+                    <td className="nowrap">
+                      <i className={`swatch s${slotOf.get(bot.id)}`} />
+                      <Link href={`/bots/${bot.id}${qs({})}`}>{bot.name}</Link>
+                    </td>
+                    <td className={`num ${pnlClass(a.pnl)}`}>{fmtUsd(a.pnl)}</td>
+                    <td className={`num ${pnlClass(a.inversePnl)}`}>{fmtUsd(a.inversePnl)}</td>
+                    <td className={`num ${pnlClass(a.inverseMaxDd)}`}>{fmtUsd(a.inverseMaxDd)}</td>
+                    {HORIZONS.map((x) => (
+                      <SkillCells key={x} s={a.skill[x]} />
+                    ))}
+                  </tr>
                 ))}
-                <th className="num">Bot P&amp;L</th>
-                <th className="num">Inverse P&amp;L</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ bot, analysis: a }, i) => {
-                const s = a.skill[h];
-                return (
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td />
+                  <td>All bots</td>
+                  <td className={`num ${pnlClass(totals.pnl)}`}>{fmtUsd(totals.pnl)}</td>
+                  <td className={`num ${pnlClass(totals.inversePnl)}`}>{fmtUsd(totals.inversePnl)}</td>
+                  <td />
+                  {HORIZONS.map((x) => (
+                    <SkillCells key={x} s={totals.skill[x]} />
+                  ))}
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        ) : (
+          <div className="table-wrap leaderboard-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Bot</th>
+                  <th className="num">Entries</th>
+                  <th className="num">Pending</th>
+                  <th className="num">Hit rate</th>
+                  <th className="num">Mean move (pips)</th>
+                  <th className="num">SD (pips)</th>
+                  <th className="num">t-stat</th>
+                  <th className="num">t (daily)</th>
+                  <th className="num">Days</th>
+                  {HORIZONS.filter((x) => x !== h).map((x) => (
+                    <th key={x} className="num">t +{x}</th>
+                  ))}
+                  <th className="num">Bot P&amp;L</th>
+                  <th className="num">Inverse P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ bot, analysis: a }, i) => (
                   <tr key={bot.id}>
                     <td>{i + 1}</td>
                     <td>
@@ -142,107 +190,96 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                       <Link href={`/bots/${bot.id}${qs({})}`}>{bot.name}</Link>{" "}
                       <span className="muted">{bot.persona}</span>
                     </td>
-                    <td className="num">
-                      {s.n}
-                      {s.pending > 0 && <span className="muted"> +{s.pending} pending</span>}
-                    </td>
-                    <td className="num">{s.n ? `${(s.hitRate * 100).toFixed(0)}%` : "–"}</td>
-                    <td className="num">{s.n ? fmtNum(s.meanPips, 2) : "–"}</td>
-                    <td className={`num strong ${tClass(s.tStat, s.n)}`}>{s.n >= 2 ? fmtNum(s.tStat) : "–"}</td>
-                    <td className={`num ${tClass(s.tStatDaily, s.days)}`}>{s.days >= 2 ? fmtNum(s.tStatDaily) : "–"}</td>
-                    <td className="num">{s.days}</td>
+                    <SkillCells s={a.skill[h]} withPending strongT />
                     {HORIZONS.filter((x) => x !== h).map((x) => (
-                      <td key={x} className="num">{a.skill[x].n >= 2 ? fmtNum(a.skill[x].tStat) : "–"}</td>
+                      <td key={x} className="num">{fmtNum(a.skill[x].tStat)}</td>
                     ))}
                     <td className={`num ${pnlClass(a.pnl)}`}>{fmtUsd(a.pnl)}</td>
                     <td className={`num ${pnlClass(a.inversePnl)}`}>{fmtUsd(a.inversePnl)}</td>
                   </tr>
-                );
-              })}
-            </tbody>
-            <tfoot>
-              <tr>
-                <td />
-                <td>All bots</td>
-                <td className="num">
-                  {totals.n}
-                  {totals.pending > 0 && <span className="muted"> +{totals.pending} pending</span>}
-                </td>
-                <td className="num">{totals.n ? `${(totals.hitRate * 100).toFixed(0)}%` : "–"}</td>
-                <td className="num">{totals.n ? fmtNum(totals.meanPips, 2) : "–"}</td>
-                <td className="num">–</td>
-                <td className="num">–</td>
-                <td className="num" />
-                {HORIZONS.filter((x) => x !== h).map((x) => (
-                  <td key={x} className="num">–</td>
                 ))}
-                <td className={`num ${pnlClass(totals.pnl)}`}>{fmtUsd(totals.pnl)}</td>
-                <td className={`num ${pnlClass(totals.inversePnl)}`}>{fmtUsd(totals.inversePnl)}</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        {/* Phones: one card per bot so every number is visible without scrolling sideways. */}
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td />
+                  <td>All bots</td>
+                  <SkillCells s={totals.skill[h]} withPending strongT />
+                  {HORIZONS.filter((x) => x !== h).map((x) => (
+                    <td key={x} className="num">{fmtNum(totals.skill[x].tStat)}</td>
+                  ))}
+                  <td className={`num ${pnlClass(totals.pnl)}`}>{fmtUsd(totals.pnl)}</td>
+                  <td className={`num ${pnlClass(totals.inversePnl)}`}>{fmtUsd(totals.inversePnl)}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+        {/* Phones: one card per bot with every number for every horizon. */}
         <div className="bot-cards">
-          {rows.map(({ bot, analysis: a }, i) => {
-            const s = a.skill[h];
-            return (
-              <div key={bot.id} className="bot-card">
-                <div className="bot-card-head">
+          {[
+            ...rows.map(({ bot, analysis: a }, i) => ({
+              key: String(bot.id),
+              head: (
+                <>
                   <span className="muted">#{i + 1}</span>
                   <i className={`swatch s${slotOf.get(bot.id)}`} />
                   <Link href={`/bots/${bot.id}${qs({})}`}>{bot.name}</Link>
                   <span className="muted">{bot.persona}</span>
-                </div>
-                <dl>
-                  <dt>Bot P&amp;L</dt>
-                  <dd className={pnlClass(a.pnl)}>{fmtUsd(a.pnl)}</dd>
-                  <dt>Inverse P&amp;L</dt>
-                  <dd className={pnlClass(a.inversePnl)}>{fmtUsd(a.inversePnl)}</dd>
-                  <dt>t-stat +{h}</dt>
-                  <dd className={`strong ${tClass(s.tStat, s.n)}`}>{s.n >= 2 ? fmtNum(s.tStat) : "–"}</dd>
-                  <dt>t (daily)</dt>
-                  <dd className={tClass(s.tStatDaily, s.days)}>{s.days >= 2 ? fmtNum(s.tStatDaily) : "–"}</dd>
-                  <dt>Entries</dt>
-                  <dd>
-                    {s.n}
-                    {s.pending > 0 && <span className="muted"> +{s.pending}</span>}
-                  </dd>
-                  <dt>Days</dt>
-                  <dd>{s.days}</dd>
-                  <dt>Hit rate</dt>
-                  <dd>{s.n ? `${(s.hitRate * 100).toFixed(0)}%` : "–"}</dd>
-                  <dt>Mean move</dt>
-                  <dd>{s.n ? `${fmtNum(s.meanPips, 2)} pips` : "–"}</dd>
-                  {HORIZONS.filter((x) => x !== h).map((x) => (
-                    <Fragment key={x}>
-                      <dt>t +{x}</dt>
-                      <dd>{a.skill[x].n >= 2 ? fmtNum(a.skill[x].tStat) : "–"}</dd>
-                    </Fragment>
-                  ))}
-                </dl>
+                </>
+              ),
+              pnl: a.pnl,
+              inversePnl: a.inversePnl,
+              skill: a.skill,
+            })),
+            { key: "total", head: <>All bots</>, pnl: totals.pnl, inversePnl: totals.inversePnl, skill: totals.skill },
+          ].map((c) => (
+            <div key={c.key} className={`bot-card${c.key === "total" ? " total" : ""}`}>
+              <div className="bot-card-head">{c.head}</div>
+              <div className="bot-card-pnl">
+                <span>
+                  Bot P&amp;L <b className={pnlClass(c.pnl)}>{fmtUsd(c.pnl)}</b>
+                </span>
+                <span>
+                  Inverse <b className={pnlClass(c.inversePnl)}>{fmtUsd(c.inversePnl)}</b>
+                </span>
               </div>
-            );
-          })}
-          <div className="bot-card total">
-            <div className="bot-card-head">All bots</div>
-            <dl>
-              <dt>Bot P&amp;L</dt>
-              <dd className={pnlClass(totals.pnl)}>{fmtUsd(totals.pnl)}</dd>
-              <dt>Inverse P&amp;L</dt>
-              <dd className={pnlClass(totals.inversePnl)}>{fmtUsd(totals.inversePnl)}</dd>
-              <dt>Entries</dt>
-              <dd>
-                {totals.n}
-                {totals.pending > 0 && <span className="muted"> +{totals.pending}</span>}
-              </dd>
-              <dt>Hit rate</dt>
-              <dd>{totals.n ? `${(totals.hitRate * 100).toFixed(0)}%` : "–"}</dd>
-              <dt>Mean move</dt>
-              <dd>{totals.n ? `${fmtNum(totals.meanPips, 2)} pips` : "–"}</dd>
-            </dl>
-          </div>
+              <table className="card-skill">
+                <thead>
+                  <tr>
+                    <th />
+                    <th className="num">n</th>
+                    <th className="num">Hit</th>
+                    <th className="num">Mean</th>
+                    <th className="num">t</th>
+                    <th className="num">t daily</th>
+                    <th className="num">Days</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {HORIZONS.map((x) => {
+                    const s = c.skill[x];
+                    return (
+                      <tr key={x} className={x === h && view !== "all" ? "current" : ""}>
+                        <td>+{x}</td>
+                        <td className="num">{s.n}</td>
+                        <td className="num">{pct(s.hitRate)}</td>
+                        <td className="num">{fmtNum(s.meanPips, 1)}</td>
+                        <td className={`num strong ${tClass(s.tStat, s.n)}`}>{fmtNum(s.tStat)}</td>
+                        <td className={`num ${tClass(s.tStatDaily, s.days)}`}>{fmtNum(s.tStatDaily)}</td>
+                        <td className="num">{s.days}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
+        <p className="download">
+          Download all data (CSV): <a href="/api/export?what=summary">summary</a> ·{" "}
+          <a href="/api/export?what=entries">entries with outcomes</a> · <a href="/api/export?what=trades">trades</a> ·{" "}
+          <a href="/api/export?what=decisions">decisions</a>
+        </p>
         <p className="note">
           Direction skill = mid-price move from entry to entry +{h}, signed by the bot&apos;s direction, spread excluded.
           Negative t = consistently wrong. &ldquo;t (daily)&rdquo; averages each UTC day first, so it is not inflated by
@@ -265,6 +302,35 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           }))}
         />
       </section>
+    </>
+  );
+}
+
+const pct = (v: number) => `${(v * 100).toFixed(0)}%`;
+
+const SKILL_COLS = [
+  { label: "Entries" },
+  { label: "Hit" },
+  { label: "Mean" },
+  { label: "SD" },
+  { label: "t" },
+  { label: "t daily" },
+  { label: "Days" },
+];
+
+// Skill numbers for one horizon. With no resolved entries every value is 0 (shown as such),
+// so each cell always holds a number.
+function SkillCells({ s, withPending, strongT }: { s: SkillStats; withPending?: boolean; strongT?: boolean }) {
+  return (
+    <>
+      <td className="num group-start">{s.n}</td>
+      {withPending && <td className="num">{s.pending}</td>}
+      <td className="num">{pct(s.hitRate)}</td>
+      <td className="num">{fmtNum(s.meanPips)}</td>
+      <td className="num">{fmtNum(s.sdPips)}</td>
+      <td className={`num ${strongT ? "strong " : ""}${tClass(s.tStat, s.n)}`}>{fmtNum(s.tStat)}</td>
+      <td className={`num ${tClass(s.tStatDaily, s.days)}`}>{fmtNum(s.tStatDaily)}</td>
+      <td className="num">{s.days}</td>
     </>
   );
 }
