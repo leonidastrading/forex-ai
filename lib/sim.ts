@@ -123,6 +123,22 @@ export function invertFills(fills: Fill[], multiplier: number, extraCost: number
     .filter((f) => f.units > 0);
 }
 
+// Trade counts from a fill list: a closed trade is a fill that realized P&L, a win one that realized a profit.
+export function closedTradeStats(fills: Fill[]): { fills: number; closed: number; wins: number } {
+  let pos = FLAT;
+  let closed = 0;
+  let wins = 0;
+  for (const f of fills) {
+    const r = applyFill(pos, f.side, f.units, f.price);
+    if (r.realizedPnl !== 0) {
+      closed++;
+      if (r.realizedPnl > 0) wins++;
+    }
+    pos = r.position;
+  }
+  return { fills: fills.length, closed, wins };
+}
+
 export function maxDrawdown(points: EquityPoint[]): number {
   let peak = -Infinity;
   let dd = 0;

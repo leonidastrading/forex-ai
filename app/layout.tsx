@@ -14,6 +14,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="top">
           <Link href="/" className="brand">AI Trader Inversion</Link>
           <span className="muted">EUR/USD · paper only</span>
+          <nav className="top-nav">
+            <Link href="/">Overview</Link>
+            <Link href="/stats">All stats</Link>
+          </nav>
         </header>
         <main>{children}</main>
       </body>

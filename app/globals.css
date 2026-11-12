@@ -195,3 +195,27 @@ pre { white-space: pre-wrap; background: var(--surface); border: 1px solid var(-
 .simple-cards dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
 details.advanced { margin: 0 0 28px; }
 details.advanced > summary { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+
+/* Home page bot table */
+.basic-table th.group { text-align: center; border-left: 1px solid var(--border); color: var(--text); }
+.basic-table .group-start { border-left: 1px solid var(--border); }
+.basic-table td, .basic-table th { padding: 8px 12px; }
+@media (max-width: 760px) {
+  .basic-table .persona { display: none; }
+  .basic-table td, .basic-table th { padding: 7px 8px; }
+}
+.top-nav { margin-left: auto; display: flex; gap: 14px; font-size: 13.5px; }
+.top { flex-wrap: wrap; }
+.basic-cards { display: none; }
+@media (max-width: 760px) {
+  .basic-wrap { display: none; }
+  .basic-cards { display: grid; gap: 8px; }
+  .basic-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .basic-card.total { font-weight: 650; }
+  .basic-card-name { font-size: 15px; margin-bottom: 6px; }
+  .basic-card-row { display: grid; grid-template-columns: 54px minmax(0, 1.3fr) minmax(0, 0.8fr) minmax(0, 0.8fr) minmax(0, 1.2fr); align-items: baseline; gap: 6px; font-size: 13.5px; font-variant-numeric: tabular-nums; color: var(--text-2); white-space: nowrap; }
+  .basic-card-row + .basic-card-row { margin-top: 3px; }
+  .basic-card-row .label { color: var(--muted); }
+  .basic-card-row > :nth-child(n + 2) { text-align: right; }
+  .basic-cards-head { padding: 0 13px; font-size: 12px; color: var(--muted); }
+}

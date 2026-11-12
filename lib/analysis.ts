@@ -1,5 +1,5 @@
 import { config } from "./config";
-import { invertFills, maxDrawdown, replayEquity, type EquityPoint, type Fill, type Mark } from "./sim";
+import { closedTradeStats, invertFills, maxDrawdown, replayEquity, type EquityPoint, type Fill, type Mark } from "./sim";
 import { HORIZONS, skillStats, type EntryOutcome, type Horizon, type SkillStats } from "./stats";
 
 export interface InverseParams {
@@ -26,6 +26,8 @@ export interface BotAnalysis {
   pnl: number;
   inversePnl: number;
   inverseMaxDd: number;
+  trades: { fills: number; closed: number; wins: number };
+  inverseTrades: { fills: number; closed: number; wins: number };
 }
 
 export function analyseBot(
@@ -39,9 +41,11 @@ export function analyseBot(
     HORIZONS.map((h) => [h, skillStats(outcomes.filter((o) => o.horizon === h))]),
   ) as Record<Horizon, SkillStats>;
   const equity = replayEquity(fills, marks, startingBalance);
-  const inverse = replayEquity(invertFills(fills, inv.multiplier, inv.extraCostPips * config.pip), marks, startingBalance);
+  const inverseFills = invertFills(fills, inv.multiplier, inv.extraCostPips * config.pip);
+  const inverse = replayEquity(inverseFills, marks, startingBalance);
   const last = (pts: EquityPoint[]) => (pts.length ? pts[pts.length - 1].equity - startingBalance : 0);
-  return { skill, equity, inverse, pnl: last(equity), inversePnl: last(inverse), inverseMaxDd: maxDrawdown(inverse) };
+  return { skill, equity, inverse, pnl: last(equity), inversePnl: last(inverse), inverseMaxDd: maxDrawdown(inverse),
+    trades: closedTradeStats(fills), inverseTrades: closedTradeStats(inverseFills) };
 }
 
 // "Most consistently wrong" first: most negative t-stat at the chosen horizon. Bots with fewer
