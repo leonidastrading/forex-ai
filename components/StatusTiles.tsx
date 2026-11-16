@@ -34,14 +34,24 @@ export function StatusTiles({ status }: { status: Status }) {
             {status.since ? ` · running since ${status.since.toISOString().slice(0, 10)}` : ""}
           </div>
           {status.lastError && Date.now() - status.lastError.started_at.getTime() < 24 * 3.6e6 && (
-            <div className="tile-sub warn">
-              Last error {status.lastError.started_at.toISOString().slice(11, 16)} UTC: {status.lastError.error ?? status.lastError.status}
+            // Orange only while the engine is failing now; an occasional skipped tick is normal
+            // (OANDA's practice API sometimes rejects a request even after retries).
+            <div className={`tile-sub ${FAILING.has(status.lastRun?.status ?? "") ? "warn" : ""}`}>
+              {FAILING.has(status.lastRun?.status ?? "") ? "Failing: " : ""}
+              {status.ticks24h.failed} of {status.ticks24h.total.toLocaleString("en-US")} ticks skipped in the last 24h
+              {" "}(OANDA hiccups) · last at {status.lastError.started_at.toISOString().slice(11, 16)} UTC
+              <details className="error-detail">
+                <summary>details</summary>
+                {status.lastError.error ?? status.lastError.status}
+              </details>
             </div>
           )}
         </div>
       </section>
   );
 }
+
+const FAILING = new Set(["error", "price_unavailable"]);
 
 // Plain-English labels for engine_runs.status.
 const ENGINE_STATUS: Record<string, string> = {

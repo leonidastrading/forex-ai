@@ -54,10 +54,14 @@ export async function getEngineStatus() {
   const [lastError] = await sql<{ started_at: Date; status: string; error: string | null }[]>`
     SELECT started_at, status, detail->>'error' AS error FROM engine_runs
     WHERE status IN ('error', 'price_unavailable') ORDER BY id DESC LIMIT 1`;
+  const [ticks24h] = await sql<{ total: number; failed: number }[]>`
+    SELECT count(*)::int AS total,
+           count(*) FILTER (WHERE status IN ('error', 'price_unavailable'))::int AS failed
+    FROM engine_runs WHERE started_at > now() - interval '24 hours' AND status <> 'market_closed'`;
   const [run] = await sql<{ started_at: Date; status: string; detail: unknown }[]>`
     SELECT started_at, status, detail FROM engine_runs ORDER BY id DESC LIMIT 1`;
   const [first] = await sql<{ ts: Date | null }[]>`SELECT min(ts) AS ts FROM price_snapshots`;
-  return { latest: latest ?? null, spentToday: usage.spent, callsToday: usage.calls, spentTotal: usage.spent_total, callsTotal: usage.calls_total, lastRun: run ?? null, lastError: lastError ?? null, since: first.ts };
+  return { latest: latest ?? null, spentToday: usage.spent, callsToday: usage.calls, spentTotal: usage.spent_total, callsTotal: usage.calls_total, lastRun: run ?? null, lastError: lastError ?? null, ticks24h, since: first.ts };
 }
 
 // Every entry (fill that opened or increased exposure) with the signed mid-to-mid move at each

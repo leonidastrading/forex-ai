@@ -87,10 +87,14 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                   </td>
                   <td className={`num group-start strong ${pnlClass(a.pnl)}`}>{fmtUsd(a.pnl)}</td>
                   <td className="num">{a.trades.fills}</td>
-                  <td className="num">{winPct(a.trades.wins, a.trades.closed)}</td>
+                  <td className="num">
+                    {winPct(a.trades.wins, a.trades.closed)} <span className="muted">of {a.trades.closed}</span>
+                  </td>
                   <td className={`num ${tClass(a.skill[T_HORIZON].tStat)}`}>{fmtNum(a.skill[T_HORIZON].tStat)}</td>
                   <td className={`num group-start strong ${pnlClass(a.inversePnl)}`}>{fmtUsd(a.inversePnl)}</td>
-                  <td className="num">{winPct(a.inverseTrades.wins, a.inverseTrades.closed)}</td>
+                  <td className="num">
+                    {winPct(a.inverseTrades.wins, a.inverseTrades.closed)} <span className="muted">of {a.inverseTrades.closed}</span>
+                  </td>
                   <td className={`num ${pnlClass(a.inverseMaxDd)}`}>{fmtUsd(a.inverseMaxDd)}</td>
                 </tr>
               ))}
@@ -100,10 +104,14 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
                 <td>All bots</td>
                 <td className={`num group-start ${pnlClass(total.pnl)}`}>{fmtUsd(total.pnl)}</td>
                 <td className="num">{total.fills}</td>
-                <td className="num">{winPct(total.wins, total.closed)}</td>
+                <td className="num">
+                    {winPct(total.wins, total.closed)} <span className="muted">of {total.closed}</span>
+                  </td>
                 <td className={`num ${tClass(total.t)}`}>{fmtNum(total.t)}</td>
                 <td className={`num group-start ${pnlClass(total.inversePnl)}`}>{fmtUsd(total.inversePnl)}</td>
-                <td className="num">{winPct(total.inverseWins, total.inverseClosed)}</td>
+                <td className="num">
+                    {winPct(total.inverseWins, total.inverseClosed)} <span className="muted">of {total.inverseClosed}</span>
+                  </td>
                 <td />
               </tr>
             </tfoot>
@@ -169,8 +177,8 @@ export default async function Overview({ searchParams }: { searchParams: SP }) {
           ))}
         </div>
         <p className="note">
-          Sorted by inverse P&amp;L, best first. P&amp;L includes open positions at the current price. Win % = profitable closed
-          trades ÷ closed trades. t-stat: is price an hour after each entry consistently on the bot&apos;s side (positive) or
+          Sorted by inverse P&amp;L, best first. P&amp;L includes open positions at the current price. Win % = profitable closed trades ÷ closed trades (&ldquo;of N&rdquo; = how many closed trades it&apos;s based on); positions
+          still open aren&apos;t counted, so a bot sitting on a big open loss can still show a high win %. t-stat: is price an hour after each entry consistently on the bot&apos;s side (positive) or
           against it (negative)? Below −2.9 sustained over 40+ trading days would be a real &ldquo;consistently wrong&rdquo; bot.
           Inverse = the opposite side of every trade at ×{inv.multiplier} size, paying its own spread
           {inv.extraCostPips ? ` plus ${inv.extraCostPips} pips per fill` : ""}.

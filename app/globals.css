@@ -219,3 +219,6 @@ details.advanced > summary { font-size: 15px; font-weight: 600; margin-bottom: 1
   .basic-card-row > :nth-child(n + 2) { text-align: right; }
   .basic-cards-head { padding: 0 13px; font-size: 12px; color: var(--muted); }
 }
+.error-detail { display: inline; margin: 0 0 0 6px; }
+.error-detail summary { display: inline; font-size: 12px; }
+.error-detail[open] { display: block; margin-top: 4px; word-break: break-word; }
