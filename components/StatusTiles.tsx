@@ -1,4 +1,5 @@
 import { config } from "@/lib/config";
+import { fxMarketOpen } from "@/lib/market";
 import type { getEngineStatus } from "@/lib/queries";
 
 type Status = Awaited<ReturnType<typeof getEngineStatus>>;
@@ -28,7 +29,13 @@ export function StatusTiles({ status }: { status: Status }) {
         </div>
         <div className="tile">
           <div className="tile-label">Engine</div>
-          <div className="tile-value">{status.lastRun ? (ENGINE_STATUS[status.lastRun.status] ?? status.lastRun.status) : "Waiting for first tick"}</div>
+          <div className="tile-value">
+            {!fxMarketOpen()
+              ? "Market closed"
+              : status.lastRun
+                ? (ENGINE_STATUS[status.lastRun.status] ?? status.lastRun.status)
+                : "Waiting for first tick"}
+          </div>
           <div className="tile-sub">
             {status.lastRun ? `last tick ${status.lastRun.started_at.toISOString().slice(0, 16).replace("T", " ")} UTC` : "waiting for cron"}
             {status.since ? ` · running since ${status.since.toISOString().slice(0, 10)}` : ""}

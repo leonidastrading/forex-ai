@@ -65,29 +65,26 @@ export async function getEngineStatus() {
 }
 
 // Every entry (fill that opened or increased exposure) with the signed mid-to-mid move at each
-// horizon: the first price snapshot at or after entry + horizon, within an allowed lag. 5m and 1h
-// must resolve within 5 / 30 minutes (entries just before the weekend close drop out); 1d may
-// take up to 3 days so Thursday/Friday entries resolve at the next open instead of vanishing.
+// horizon, from the mid_5m / mid_1h / mid_1d prices the engine fills in from OANDA's history
+// (see resolveOutcomes). Not yet filled = pending (movePips null).
 export async function getEntryOutcomes(botId?: number): Promise<EntryOutcome[]> {
   const sql = getSql();
   const rows = await sql<{ bot_id: number; ts: Date; dir: 1 | -1; horizon: Horizon; move: number | null }[]>`
     WITH entries AS (
-      SELECT t.bot_id, t.ts, CASE WHEN t.side = 'buy' THEN 1 ELSE -1 END AS dir, (t.bid + t.ask) / 2 AS mid0
+      SELECT t.bot_id, t.ts, CASE WHEN t.side = 'buy' THEN 1 ELSE -1 END AS dir, (t.bid + t.ask) / 2 AS mid0,
+             t.mid_5m, t.mid_1h, t.mid_1d
       FROM trades t
       WHERE t.opening_units > 0 ${botId ? sql`AND t.bot_id = ${botId}` : sql``}
-    ), horizons(horizon, iv, max_lag) AS (
-      VALUES ('5m', interval '5 minutes', interval '5 minutes'),
-             ('1h', interval '1 hour', interval '30 minutes'),
-             ('1d', interval '1 day', interval '3 days')
+    ), o AS (
+      SELECT bot_id, ts, dir, mid0, '5m' AS horizon, mid_5m AS mid1 FROM entries
+      UNION ALL SELECT bot_id, ts, dir, mid0, '1h', mid_1h FROM entries
+      UNION ALL SELECT bot_id, ts, dir, mid0, '1d', mid_1d FROM entries
     )
-    SELECT e.bot_id, e.ts, e.dir, h.horizon, (e.dir * (p.mid1 - e.mid0) / ${config.pip})::float8 AS move
-    FROM entries e CROSS JOIN horizons h
-    LEFT JOIN LATERAL (
-      SELECT (s.bid + s.ask) / 2 AS mid1 FROM price_snapshots s
-      WHERE s.instrument = ${config.instrument} AND s.ts >= e.ts + h.iv AND s.ts <= e.ts + h.iv + h.max_lag
-      ORDER BY s.ts LIMIT 1
-    ) p ON true
-    ORDER BY e.ts`;
+    SELECT bot_id, ts, dir, horizon,
+           CASE WHEN mid1 IS NULL THEN NULL ELSE (dir * (mid1 - mid0) / ${config.pip})::float8 END AS move
+    FROM o
+    WHERE mid1 IS NULL OR mid1 > 0 -- -1 = no price within the allowed lag: left out
+    ORDER BY ts`;
   return rows.map((r) => ({ botId: r.bot_id, ts: r.ts.getTime(), dir: r.dir, horizon: r.horizon, movePips: r.move }));
 }
 

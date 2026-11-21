@@ -62,6 +62,11 @@ CREATE TABLE IF NOT EXISTS trades (
   position_after int NOT NULL
 );
 CREATE INDEX IF NOT EXISTS trades_bot_ts ON trades (bot_id, ts);
+-- Mid price 5 minutes / 1 hour / 1 day after each entry, filled in later from OANDA's price history
+-- (so the engine doesn't have to record a price every minute). -1 = no price within the allowed lag.
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS mid_5m numeric;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS mid_1h numeric;
+ALTER TABLE trades ADD COLUMN IF NOT EXISTS mid_1d numeric;
 
 CREATE TABLE IF NOT EXISTS positions (
   bot_id       int PRIMARY KEY REFERENCES bots(id),

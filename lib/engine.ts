@@ -2,7 +2,7 @@ import type postgres from "postgres";
 import { config, maxCallCost } from "./config";
 import { getSql } from "./db";
 import { askBot, type BotDecision, type LlmResult } from "./llm";
-import { fxMarketOpen, getCandles, getQuote, type Candle, type Quote } from "./market";
+import { fxMarketOpen, getCandles, getMidAt, getQuote, type Candle, type Quote } from "./market";
 import { relevantNews, type NewsEvent } from "./news";
 import { applyFill, equity, fillPrice, unrealizedPnl, type Position, type Side } from "./sim";
 
@@ -26,12 +26,15 @@ export interface TickSummary {
   skippedForBudget?: string[];
   results?: { bot: string; status: string; detail?: string | null }[];
   spentTodayUsd?: number;
+  outcomesResolved?: number;
   error?: string;
 }
 
 const LOCK_SECONDS = 240;
 
 export async function runTick(opts: { force?: boolean } = {}): Promise<TickSummary> {
+  // Outside FX hours, return before touching the database so Neon can scale to zero all weekend.
+  if (!opts.force && !fxMarketOpen()) return { status: "market_closed" };
   const sql = getSql();
   const lock = await sql`
     UPDATE engine_lock SET locked_until = now() + ${LOCK_SECONDS + " seconds"}::interval
@@ -42,6 +45,9 @@ export async function runTick(opts: { force?: boolean } = {}): Promise<TickSumma
   let summary: TickSummary;
   try {
     summary = await tick(sql, opts);
+    if (summary.status !== "market_closed" && summary.status !== "price_unavailable") {
+      summary.outcomesResolved = await resolveOutcomes(sql).catch(() => 0);
+    }
   } catch (err) {
     summary = { status: "error", error: err instanceof Error ? err.message : String(err) };
   } finally {
@@ -137,6 +143,50 @@ async function candles(sql: postgres.Sql, granularity: "M5" | "H1", count: numbe
     if (!cached) throw err;
     return cached.value.map((c) => ({ ...c, ts: new Date(c.ts) }));
   }
+}
+
+// ---- Entry outcomes ---------------------------------------------------------------------------
+
+// Fill in the mid price 5m / 1h / 1d after each entry from OANDA's 1-minute history. Takes the
+// first candle at or after the target time; if that is later than the allowed lag (feed gap,
+// weekend for the short horizons) the outcome is marked -1 and left out of the statistics.
+const OUTCOME_HORIZONS = [
+  { col: "mid_5m", ms: 5 * 60e3, maxLagMs: 5 * 60e3 },
+  { col: "mid_1h", ms: 3.6e6, maxLagMs: 30 * 60e3 },
+  { col: "mid_1d", ms: 864e5, maxLagMs: 3 * 864e5 },
+] as const;
+const MAX_LOOKUPS_PER_TICK = 100;
+
+async function resolveOutcomes(sql: postgres.Sql): Promise<number> {
+  const pending = await sql<{ id: string; ts: Date; mid_5m: number | null; mid_1h: number | null; mid_1d: number | null }[]>`
+    SELECT id, ts, mid_5m, mid_1h, mid_1d FROM trades
+    WHERE opening_units > 0 AND (
+      (mid_5m IS NULL AND ts < now() - interval '6 minutes') OR
+      (mid_1h IS NULL AND ts < now() - interval '61 minutes') OR
+      (mid_1d IS NULL AND ts < now() - interval '1 day 1 minute'))
+    ORDER BY ts LIMIT ${MAX_LOOKUPS_PER_TICK}`;
+  const now = Date.now();
+  const jobs = pending.flatMap((t) =>
+    OUTCOME_HORIZONS.filter((h) => t[h.col] === null && t.ts.getTime() + h.ms < now - 60e3).map((h) => ({ t, h })),
+  ).slice(0, MAX_LOOKUPS_PER_TICK);
+
+  let resolved = 0;
+  for (let i = 0; i < jobs.length; i += 5) {
+    await Promise.all(
+      jobs.slice(i, i + 5).map(async ({ t, h }) => {
+        const target = t.ts.getTime() + h.ms;
+        const p = await getMidAt(new Date(target)).catch(() => undefined);
+        if (p === undefined) return; // OANDA error: try again next tick
+        let mid: number | null = null;
+        if (p && p.ts.getTime() - target <= h.maxLagMs) mid = p.mid;
+        else if (p || now > target + h.maxLagMs) mid = -1;
+        if (mid === null) return; // no candle yet, still inside the window
+        await sql`UPDATE trades SET ${sql({ [h.col]: mid })} WHERE id = ${t.id}`;
+        resolved++;
+      }),
+    );
+  }
+  return resolved;
 }
 
 // ---- Bot context ----------------------------------------------------------------------------

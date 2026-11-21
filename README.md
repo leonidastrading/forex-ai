@@ -10,7 +10,7 @@ feed, and all fills are simulated internally.
 ## How it works
 
 ```
-Scheduler (every minute, Sun–Fri)
+Scheduler (every 15 minutes)
   └─ GET /api/cron/tick
        ├─ skip if FX market closed / OANDA says not tradeable
        ├─ fetch EUR/USD bid/ask from OANDA → price_snapshots
@@ -21,8 +21,10 @@ Scheduler (every minute, Sun–Fri)
        └─ apply desk rules, simulate the fill at bid/ask + slippage, record decision/trade/position
 ```
 
-Price snapshots are recorded every minute even when no bot is due, so the +5m outcome is measured
-at roughly 1-minute resolution.
+Outside FX hours the tick returns before touching the database. Each tick also looks up, from
+OANDA's 1-minute price history, the mid price 5 minutes, 1 hour and 1 day after earlier entries and
+stores it on the trade (`mid_5m`, `mid_1h`, `mid_1d`), so the direction-skill numbers don't depend
+on how often the scheduler runs.
 
 ### The bots (`lib/personas.ts`)
 
@@ -108,7 +110,7 @@ Vercel Hobby only allows daily crons, so use a free external scheduler:
 1. Sign up at [cron-job.org](https://cron-job.org) (free, supports every-minute jobs).
 2. Create a cronjob:
    - URL: `https://<your-app>.vercel.app/api/cron/tick`
-   - Schedule: every minute
+   - Schedule: every 15 minutes
    - Advanced → Headers: `Authorization` = `Bearer <your CRON_SECRET>`
    - Optional: turn on failure notifications
 3. Save. "History" should show HTTP 200 responses. Outside FX hours the body is `{"status":"market_closed"}`.
@@ -117,12 +119,14 @@ If the project's Deployment Protection blocks the production URL, the job gets a
 (401). Turn off Vercel Authentication for production, or add a protection-bypass secret.
 
 On a Vercel Pro plan you can use Vercel Cron instead. Add this to `vercel.json`:
-`"crons": [{ "path": "/api/cron/tick", "schedule": "* * * * 0-5" }]`. Vercel sends the
+`"crons": [{ "path": "/api/cron/tick", "schedule": "*/15 * * * 0-5" }]`. Vercel sends the
 `CRON_SECRET` header automatically.
 
-Ticks must come at least every 5 minutes for +5m outcomes to resolve (see the 5-minute lag rule
-above). Running every minute also keeps the Neon compute awake about 120 hours a week, so check
-that this fits your Neon plan.
+**Database cost.** Neon bills compute for every hour the database is awake, and it only sleeps
+after 5 idle minutes. A 1-minute schedule keeps it awake permanently (about $75/month at 1 CU).
+With a 15-minute schedule it can sleep between ticks, and in the Neon console you should also set
+the compute size to 0.25 CU (min and max) with scale to zero on: this app needs no more. Bots
+decide on every tick, so the schedule also sets how often they trade.
 
 ### Cost
 

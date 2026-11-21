@@ -90,6 +90,17 @@ export async function getCandles(granularity: "M5" | "H1", count: number): Promi
   }));
 }
 
+// Mid price of the first 1-minute candle at or after `at` (its open), or null if OANDA has none yet
+// (e.g. `at` falls in the weekend and the market hasn't reopened). `at` must be in the past.
+export async function getMidAt(at: Date): Promise<{ ts: Date; mid: number } | null> {
+  if (config.priceSource === "mock") return { ts: at, mid: mockMid(at.getTime()) };
+  const data = await oanda<{ candles: { time: string; mid: { o: string } }[] }>(
+    `/v3/instruments/${config.instrument}/candles?granularity=M1&price=M&count=1&from=${encodeURIComponent(at.toISOString())}`,
+  );
+  const c = data.candles[0];
+  return c ? { ts: new Date(c.time), mid: Number(c.mid.o) } : null;
+}
+
 // ---- Mock feed (PRICE_SOURCE=mock): deterministic wiggle + noise, for local testing only ----
 
 function mockMid(t: number): number {
